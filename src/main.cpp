@@ -16,6 +16,7 @@ public:
     int wStart;
     int wEnd;
     int actualStart;
+    int minSplit;
 
     std::string text();
 };
@@ -93,14 +94,13 @@ void cSchedule::add(cTask &t)
         }
     }
 
-
     if (t.actualStart < 0)
     {
         // no space big enough for task
         if (freeFragments(t) > t.duration)
         {
             std::cout << "splitting task\n";
-            split( t );
+            split(t);
         }
         else
             vTask.push_back(t);
@@ -115,14 +115,42 @@ void cSchedule::add(cTask &t)
 int cSchedule::freeFragments(const cTask &t)
 {
     int total = 0;
+
+    bool infragment = false;
+    int fragmentStart;
+    int fragmentEnd;
+
     // loop over window
     for (
         int hour = t.wStart * HOURS_PER_DAY;
         hour <= t.wEnd * HOURS_PER_DAY;
         hour++)
     {
-        if (!vBusyHour[hour])
-            total++;
+        if (infragment)
+        {
+            if (vBusyHour[hour])
+                fragmentEnd++;      // extend fragment
+
+            else
+            {
+                // free fragment has ended
+
+                // check that fragment is not too small for minimum split
+                int length = fragmentEnd - fragmentStart + 1;
+                if (length >= t.minSplit)
+                    total += length;
+
+                infragment = false;
+            }
+        } else {
+            if( ! vBusyHour[hour] )
+            {
+                // new fragment started
+                fragmentStart = hour;
+                fragmentEnd = hour;
+                infragment = true;
+            }
+        }
     }
     return total;
 }
@@ -159,7 +187,7 @@ void cSchedule::split(cTask &t)
 
                 // mark the busy hours
                 int busyend = fragmentStart + t.duration;
-                if( busyend > fragmentEnd )
+                if (busyend > fragmentEnd)
                     busyend = fragmentEnd;
                 for (
                     int makebusy = fragmentStart;
@@ -170,7 +198,8 @@ void cSchedule::split(cTask &t)
                 // update remaining task duration
                 t.duration -= busyend - fragmentStart;
 
-                if( t.duration <= 0 ) {
+                if (t.duration <= 0)
+                {
                     // the task duration has completed
                     return;
                 }
@@ -189,6 +218,7 @@ void cSchedule::split(cTask &t)
         }
     }
 }
+
 void readfile(
     cSchedule &S,
     const std::string &fname)
@@ -199,15 +229,19 @@ void readfile(
             "Cannot open input file");
     std::string type;
     cTask task;
-    ifs >> type >> task.name >> task.duration >> task.wStart >> task.wEnd;
+    ifs >> type >> task.name >> task.duration >> task.wStart >> task.wEnd 
+        >> task.minSplit;
     while (ifs.good())
     {
         std::cout << "\nAdding "
-                  << task.name << " " << task.duration << " " << task.wStart << " " << task.wEnd << "\n";
+                  << task.name << " " << task.duration << " "
+                  << task.wStart << " " << task.wEnd << " "
+                  << task.minSplit << "\n";
 
         S.add(task);
 
-        ifs >> type >> task.name >> task.duration >> task.wStart >> task.wEnd;
+        ifs >> type >> task.name >> task.duration >> task.wStart >> task.wEnd 
+            >> task.minSplit;
     }
 }
 
