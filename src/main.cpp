@@ -6,7 +6,7 @@
 #include <algorithm>
 
 #define HOURS_PER_DAY 24
-#define TOTAL_AVAILABLE_HOURS 30 * HOURS_PER_DAY
+#define TOTAL_AVAILABLE_HOURS 3 * HOURS_PER_DAY
 
 class cTask
 {
@@ -30,12 +30,15 @@ public:
     {
         vBusyHour.resize(TOTAL_AVAILABLE_HOURS, false);
     }
+
+    // add task to schedule
     void add(cTask &t);
+
+private:
+    // find free fragments in task window
+    int freeFragments(const cTask &t);
+    void split(cTask &t);
 };
-
-
-
-
 
 std::string cTask::text()
 {
@@ -85,19 +88,109 @@ void cSchedule::add(cTask &t)
             for (int hour = StartHour; hour < EndHour; hour++)
                 vBusyHour[hour] = true;
             t.actualStart = StartHour;
+
             break;
         }
     }
 
-    vTask.push_back( t );
+
+    if (t.actualStart < 0)
+    {
+        // no space big enough for task
+        if (freeFragments(t) > t.duration)
+        {
+            std::cout << "splitting task\n";
+            split( t );
+        }
+        else
+            vTask.push_back(t);
+    }
+    else
+        vTask.push_back(t);
 
     for (auto &t : vTask)
         std::cout << t.text() << "\n";
 }
 
+int cSchedule::freeFragments(const cTask &t)
+{
+    int total = 0;
+    // loop over window
+    for (
+        int hour = t.wStart * HOURS_PER_DAY;
+        hour <= t.wEnd * HOURS_PER_DAY;
+        hour++)
+    {
+        if (!vBusyHour[hour])
+            total++;
+    }
+    return total;
+}
 
+void cSchedule::split(cTask &t)
+{
+    int splitCount = 0;
+    bool infragment = false;
+    int fragmentStart;
+    int fragmentEnd;
+
+    // loop over hours in task window
+    for (
+        int hour = t.wStart * HOURS_PER_DAY;
+        hour <= t.wEnd * HOURS_PER_DAY;
+        hour++)
+    {
+        if (infragment)
+        {
+            if (!vBusyHour[hour])
+            {
+                // extend fragment
+                fragmentEnd++;
+            }
+            else
+            {
+                // current fragment ended
+                // split off part of task that fits into fragment
+                splitCount++;
+                cTask split;
+                split.name = t.name + "-" + std::to_string(splitCount);
+                split.actualStart = fragmentStart;
+                vTask.push_back(split);
+
+                // mark the busy hours
+                int busyend = fragmentStart + t.duration;
+                if( busyend > fragmentEnd )
+                    busyend = fragmentEnd;
+                for (
+                    int makebusy = fragmentStart;
+                    makebusy <= busyend;
+                    makebusy++)
+                    vBusyHour[makebusy] = true;
+
+                // update remaining task duration
+                t.duration -= busyend - fragmentStart;
+
+                if( t.duration <= 0 ) {
+                    // the task duration has completed
+                    return;
+                }
+                infragment = false;
+            }
+        }
+        else
+        {
+            if (!vBusyHour[hour])
+            {
+                // new fragment start
+                fragmentStart = hour;
+                fragmentEnd = hour;
+                infragment = true;
+            }
+        }
+    }
+}
 void readfile(
-    cSchedule& S,
+    cSchedule &S,
     const std::string &fname)
 {
     std::ifstream ifs(fname);
@@ -109,8 +202,8 @@ void readfile(
     ifs >> type >> task.name >> task.duration >> task.wStart >> task.wEnd;
     while (ifs.good())
     {
-        std::cout << "\nAdding " 
-            << task.name << " " << task.duration << " " << task.wStart << " " << task.wEnd << "\n";
+        std::cout << "\nAdding "
+                  << task.name << " " << task.duration << " " << task.wStart << " " << task.wEnd << "\n";
 
         S.add(task);
 
@@ -125,7 +218,7 @@ main(int argc, char *argv[])
             "Cannot open input file");
 
     cSchedule S;
-    readfile(S,argv[1]);
+    readfile(S, argv[1]);
 
     return 0;
 }
