@@ -85,4 +85,6 @@ private:
     int totallowerfulfill(cTask &t);
 
     cTask &taskOccupy(int time);
+
+    void schedule(cTask &t, int start);
 };

@@ -6,7 +6,7 @@
 #include <algorithm>
 
 #define HOURS_PER_DAY 24
-#define TOTAL_AVAILABLE_HOURS 12
+#define TOTAL_AVAILABLE_HOURS 50
 
 #include "schedule.h"
 
@@ -38,37 +38,55 @@ std::string cTask::text() const
     //    << fulfillment;
     return ss.str();
 }
-void cSchedule::addW(cTask &t)
+void cSchedule::addW(cTask &task)
 {
-    std::cout << "\nAdding " << t.text() << "\n";
+    std::cout << "\nAdding " << task.text() << "\n";
 
-    t.actualStart = -1;
+    task.actualStart = -1;
 
     // find smallest free time fragment in task window where task will fit
     std::vector<std::pair<int, int>> vfrag;
-    freeFragments(t, vfrag);
+    int totalFree = freeFragments(task, vfrag);
     for (auto it = vfrag.begin();
          it != vfrag.end();
          it++)
     {
-        auto db = (*it).first;
         int length = it->second - it->first + 1;
-        if (length > t.duration)
+        if (length > task.duration)
         {
             // schedule task
-            t.actualStart = it->first;
-            for (int hour = it->first;
-                 hour <= it->first + t.duration - 1;
-                 hour++)
-                vBusyHour[hour] = true;
-            vTask.push_back(t);
+            schedule(task, it->first);
             display();
             return;
         }
     }
-    std::cout << "no space big enough for task\n";
-    vTask.push_back(t);
+    std::cout << "no single space big enough for task\n";
+
+    if (task.minSplit > 0)
+    {
+        if (totalFree > task.duration)
+        {
+            std::cout << "splitting task\n";
+            split(task);
+            display();
+            return;
+        }
+    }
+
+    // scheduling failed
+    vTask.push_back(task);
 }
+
+void cSchedule::schedule(cTask &task, int start)
+{
+    task.actualStart = start;
+    for (int hour = start;
+         hour < start + task.duration;
+         hour++)
+        vBusyHour[hour] = true;
+    vTask.push_back(task);
+}
+
 void cSchedule::add(cTask &t)
 {
     std::cout << "\nAdding " << t.text() << "\n";
@@ -320,7 +338,7 @@ void cSchedule::unitTest()
 {
     std::vector<std::pair<int, int>> vfrag{
         {4, 10},
-        {1, 2}
+        {1, 2}};
     sort(vfrag);
     if (vfrag[0].first != 1)
         throw std::runtime_error(
