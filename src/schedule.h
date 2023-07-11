@@ -58,7 +58,6 @@ public:
 
     // add task to schedule
     void add(cTask &t);
-    void addW(cTask &t);
 
     void display() const;
 

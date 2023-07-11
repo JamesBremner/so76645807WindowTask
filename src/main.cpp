@@ -38,7 +38,7 @@ std::string cTask::text() const
     //    << fulfillment;
     return ss.str();
 }
-void cSchedule::addW(cTask &task)
+void cSchedule::add(cTask &task)
 {
     std::cout << "\nAdding " << task.text() << "\n";
 
@@ -73,7 +73,10 @@ void cSchedule::addW(cTask &task)
         }
     }
 
-    // scheduling failed
+    if (totallowerfulfill(task) > task.duration)
+    {
+        std::cout << "I can bump tasks with lower fulfillment scores\n";
+    }
     vTask.push_back(task);
 }
 
@@ -85,69 +88,6 @@ void cSchedule::schedule(cTask &task, int start)
          hour++)
         vBusyHour[hour] = true;
     vTask.push_back(task);
-}
-
-void cSchedule::add(cTask &t)
-{
-    std::cout << "\nAdding " << t.text() << "\n";
-
-    t.actualStart = -1;
-
-    // loop over window
-    for (
-        int delay = 0;
-        delay < t.getLengthWindowTime() - t.duration;
-        delay++)
-    {
-        // check that no overlap with other task
-        bool okBusy = true;
-        int StartHour = t.getStartWindowTime() + delay;
-        int EndHour = StartHour + t.duration;
-        for (int hour = StartHour;
-             hour < EndHour;
-             hour++)
-        {
-            if (vBusyHour[hour])
-            {
-                // overlap
-                okBusy = false;
-                break;
-            }
-        }
-        if (okBusy)
-        {
-            // add task to schedule
-            for (int hour = StartHour; hour < EndHour; hour++)
-                vBusyHour[hour] = true;
-            t.actualStart = StartHour;
-            vTask.push_back(t);
-            display();
-            return;
-        }
-    }
-
-    std::cout << "no space big enough for task\n";
-
-    if (t.minSplit > 0)
-    {
-        std::vector<std::pair<int, int>> vfrag;
-        if (freeFragments(t, vfrag) > t.duration)
-        {
-            std::cout << "splitting task\n";
-            split(t);
-            display();
-            return;
-        }
-    }
-
-    if (t.actualStart < 0)
-    {
-        if (totallowerfulfill(t) > t.duration)
-        {
-            std::cout << "I can bump tasks with lower fulfillment scores\n";
-        }
-        vTask.push_back(t);
-    }
 }
 
 void cSchedule::display() const
@@ -366,7 +306,7 @@ void readfile(
 
         task.setWindow(wStart, wEnd);
 
-        S.addW(task);
+        S.add(task);
     }
 }
 
