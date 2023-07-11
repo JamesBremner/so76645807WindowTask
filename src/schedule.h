@@ -8,12 +8,18 @@ public:
     int minSplit;
     int fulfillment;
 
+    void setWindow(int start, int end)
+    {
+        wStart = start;
+        wEnd = end;
+    }
+
     /// @brief set window start
     /// @param start 1-based day index
 
     void setStartWindowDay(int start)
     {
-        wStart = (start-1) * HOURS_PER_DAY;
+        wStart = (start - 1) * HOURS_PER_DAY;
     }
 
     /// @brief set window end
@@ -48,22 +54,30 @@ private:
 class cSchedule
 {
 public:
-    cSchedule()
-    {
-        vBusyHour.resize(TOTAL_AVAILABLE_HOURS, false);
-    }
+    cSchedule();
 
     // add task to schedule
     void add(cTask &t);
+    void addW(cTask &t);
 
     void display() const;
+
+    void unitTest();
 
 private:
     std::vector<bool> vBusyHour;
     std::vector<cTask> vTask;
 
-    // find free fragments in task window
-    int freeFragments(const cTask &t);
+    /// @brief  find free time fragments in task window
+    /// @param[in] t the task
+    /// @param[out] vfrag free fragments
+    /// @return total length of all free fragments
+
+    int freeFragments(
+        const cTask &t,
+        std::vector<std::pair<int, int>> &vfrag);
+
+    void sort(std::vector<std::pair<int, int>> &vfrag);
 
     // split task into free fragments of window
     void split(cTask &t);

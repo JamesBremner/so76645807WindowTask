@@ -6,7 +6,7 @@
 #include <algorithm>
 
 #define HOURS_PER_DAY 24
-#define TOTAL_AVAILABLE_HOURS 3 * HOURS_PER_DAY
+#define TOTAL_AVAILABLE_HOURS 12
 
 #include "schedule.h"
 
@@ -22,7 +22,7 @@ std::string cTask::textSchedule() const
         int day = actualStart / HOURS_PER_DAY;
         int hour = actualStart - day * HOURS_PER_DAY;
         ss << "task " << name
-           << " scheduled at " << hour << " on day " << day;
+           << " scheduled at hour " << hour << " on day " << day;
     }
     return ss.str();
 }
@@ -30,14 +30,45 @@ std::string cTask::textSchedule() const
 std::string cTask::text() const
 {
     std::stringstream ss;
-    ss << name << " " << duration << " "
-       << " windstartday:" << wStart / HOURS_PER_DAY
-       << " windendday:" << wEnd / HOURS_PER_DAY << " "
-       << minSplit << " "
-       << fulfillment;
+    ss << " task:" << name
+       << " duration " << duration
+       << " windowstarthour:" << wStart
+       << " windowendhour:" << wEnd << " ";
+    //    << minSplit << " "
+    //    << fulfillment;
     return ss.str();
 }
+void cSchedule::addW(cTask &t)
+{
+    std::cout << "\nAdding " << t.text() << "\n";
 
+    t.actualStart = -1;
+
+    // find smallest free time fragment in task window where task will fit
+    std::vector<std::pair<int, int>> vfrag;
+    freeFragments(t, vfrag);
+    for (auto it = vfrag.begin();
+         it != vfrag.end();
+         it++)
+    {
+        auto db = (*it).first;
+        int length = it->second - it->first + 1;
+        if (length > t.duration)
+        {
+            // schedule task
+            t.actualStart = it->first;
+            for (int hour = it->first;
+                 hour <= it->first + t.duration - 1;
+                 hour++)
+                vBusyHour[hour] = true;
+            vTask.push_back(t);
+            display();
+            return;
+        }
+    }
+    std::cout << "no space big enough for task\n";
+    vTask.push_back(t);
+}
 void cSchedule::add(cTask &t)
 {
     std::cout << "\nAdding " << t.text() << "\n";
@@ -81,7 +112,8 @@ void cSchedule::add(cTask &t)
 
     if (t.minSplit > 0)
     {
-        if (freeFragments(t) > t.duration)
+        std::vector<std::pair<int, int>> vfrag;
+        if (freeFragments(t, vfrag) > t.duration)
         {
             std::cout << "splitting task\n";
             split(t);
@@ -104,6 +136,15 @@ void cSchedule::display() const
 {
     for (auto &t : vTask)
         std::cout << t.textSchedule() << "\n";
+
+    for (bool b : vBusyHour)
+    {
+        if (b)
+            std::cout << 'B';
+        else
+            std::cout << '_';
+    }
+    std::cout << "\n";
 }
 
 cTask &cSchedule::taskOccupy(int time)
@@ -143,9 +184,11 @@ int cSchedule::totallowerfulfill(cTask &t)
     return total;
 }
 
-int cSchedule::freeFragments(const cTask &t)
+int cSchedule::freeFragments(
+    const cTask &t,
+    std::vector<std::pair<int, int>> &vfrag)
 {
-    int total = 0;
+    int total = 0; // total length of all free fragmets
 
     bool infragment = false;
     int fragmentStart;
@@ -167,6 +210,9 @@ int cSchedule::freeFragments(const cTask &t)
             else
             {
                 // free fragment has ended
+                vfrag.push_back(
+                    std::make_pair(
+                        fragmentStart, fragmentEnd));
 
                 // check that fragment is not too small for minimum split
                 int length = fragmentEnd - fragmentStart + 1;
@@ -187,7 +233,22 @@ int cSchedule::freeFragments(const cTask &t)
             }
         }
     }
+
+    /// sort free fragments into descending length order
+    sort(vfrag);
+
     return total;
+}
+
+void cSchedule::sort(std::vector<std::pair<int, int>> &vfrag)
+{
+    std::sort(vfrag.begin(), vfrag.end(),
+              [](std::pair<int, int> &l, std::pair<int, int> &r) -> bool
+              {
+                  int ll = l.second - l.first + 1;
+                  int lr = r.second - r.first + 1;
+                  return ll < lr;
+              });
 }
 
 void cSchedule::split(cTask &t)
@@ -255,6 +316,17 @@ void cSchedule::split(cTask &t)
     }
 }
 
+void cSchedule::unitTest()
+{
+    std::vector<std::pair<int, int>> vfrag{
+        {4, 10},
+        {1, 2}
+    sort(vfrag);
+    if (vfrag[0].first != 1)
+        throw std::runtime_error(
+            "sort failed unit test");
+}
+
 void readfile(
     cSchedule &S,
     const std::string &fname)
@@ -274,11 +346,17 @@ void readfile(
         if (!ifs.good())
             break;
 
-        task.setStartWindowDay(wStart);
-        task.setEndWindowDay(wEnd);
+        task.setWindow(wStart, wEnd);
 
-        S.add(task);
+        S.addW(task);
     }
+}
+
+cSchedule::cSchedule()
+{
+    vBusyHour.resize(TOTAL_AVAILABLE_HOURS, false);
+
+    unitTest();
 }
 
 main(int argc, char *argv[])
@@ -288,6 +366,7 @@ main(int argc, char *argv[])
             "Cannot open input file");
 
     cSchedule S;
+
     readfile(S, argv[1]);
 
     return 0;
