@@ -8,40 +8,9 @@
 #define HOURS_PER_DAY 24
 #define TOTAL_AVAILABLE_HOURS 3 * HOURS_PER_DAY
 
-class cTask
-{
-public:
-    std::string name;
-    int duration;
-    int wStart;
-    int wEnd;
-    int actualStart;
-    int minSplit;
+#include "schedule.h"
 
-    std::string text();
-};
-
-class cSchedule
-{
-public:
-    std::vector<bool> vBusyHour;
-    std::vector<cTask> vTask;
-
-    cSchedule()
-    {
-        vBusyHour.resize(TOTAL_AVAILABLE_HOURS, false);
-    }
-
-    // add task to schedule
-    void add(cTask &t);
-
-private:
-    // find free fragments in task window
-    int freeFragments(const cTask &t);
-    void split(cTask &t);
-};
-
-std::string cTask::text()
+std::string cTask::textSchedule() const
 {
     std::stringstream ss;
     if (actualStart < 0)
@@ -58,19 +27,32 @@ std::string cTask::text()
     return ss.str();
 }
 
+std::string cTask::text() const
+{
+    std::stringstream ss;
+    ss << name << " " << duration << " "
+       << " windstartday:" << wStart / HOURS_PER_DAY
+       << " windendday:" << wEnd / HOURS_PER_DAY << " "
+       << minSplit << " "
+       << fulfillment;
+    return ss.str();
+}
+
 void cSchedule::add(cTask &t)
 {
+    std::cout << "\nAdding " << t.text() << "\n";
+
     t.actualStart = -1;
 
     // loop over window
     for (
         int delay = 0;
-        delay < t.wEnd - t.wStart - t.duration;
+        delay < t.getLengthWindowTime() - t.duration;
         delay++)
     {
         // check that no overlap with other task
         bool okBusy = true;
-        int StartHour = t.wStart * HOURS_PER_DAY + delay;
+        int StartHour = t.getStartWindowTime() + delay;
         int EndHour = StartHour + t.duration;
         for (int hour = StartHour;
              hour < EndHour;
@@ -89,27 +71,76 @@ void cSchedule::add(cTask &t)
             for (int hour = StartHour; hour < EndHour; hour++)
                 vBusyHour[hour] = true;
             t.actualStart = StartHour;
+            vTask.push_back(t);
+            display();
+            return;
+        }
+    }
 
-            break;
+    std::cout << "no space big enough for task\n";
+
+    if (t.minSplit > 0)
+    {
+        if (freeFragments(t) > t.duration)
+        {
+            std::cout << "splitting task\n";
+            split(t);
+            display();
+            return;
         }
     }
 
     if (t.actualStart < 0)
     {
-        // no space big enough for task
-        if (freeFragments(t) > t.duration)
+        if (totallowerfulfill(t) > t.duration)
         {
-            std::cout << "splitting task\n";
-            split(t);
+            std::cout << "I can bump tasks with lower fulfillment scores\n";
         }
-        else
-            vTask.push_back(t);
-    }
-    else
         vTask.push_back(t);
+    }
+}
 
+void cSchedule::display() const
+{
     for (auto &t : vTask)
-        std::cout << t.text() << "\n";
+        std::cout << t.textSchedule() << "\n";
+}
+
+cTask &cSchedule::taskOccupy(int time)
+{
+    // loop over tasks
+    for (auto &t : vTask)
+    {
+        if (t.actualStart < 0)
+            continue;
+        if (t.actualStart > time)
+            continue;
+        if (t.actualStart + t.duration > time)
+            return t;
+    }
+    static cTask nullTask;
+    nullTask.actualStart = -1;
+    return nullTask;
+}
+
+int cSchedule::totallowerfulfill(cTask &t)
+{
+    int total = 0;
+
+    // loop over window
+    for (
+        int hour = t.getStartWindowTime();
+        hour <= t.getEndWindowTime();
+        hour++)
+    {
+        cTask &o = taskOccupy(hour);
+        if (o.actualStart < 0)
+            continue;
+        if (o.fulfillment >= t.fulfillment)
+            continue;
+        total++;
+    }
+    return total;
 }
 
 int cSchedule::freeFragments(const cTask &t)
@@ -122,14 +153,16 @@ int cSchedule::freeFragments(const cTask &t)
 
     // loop over window
     for (
-        int hour = t.wStart * HOURS_PER_DAY;
-        hour <= t.wEnd * HOURS_PER_DAY;
+        int hour = t.getStartWindowTime();
+        hour <= t.getEndWindowTime();
         hour++)
     {
         if (infragment)
         {
-            if (vBusyHour[hour])
-                fragmentEnd++;      // extend fragment
+            if (!vBusyHour[hour] &&
+                hour != t.getEndWindowTime())
+
+                fragmentEnd++; // extend fragment
 
             else
             {
@@ -142,8 +175,10 @@ int cSchedule::freeFragments(const cTask &t)
 
                 infragment = false;
             }
-        } else {
-            if( ! vBusyHour[hour] )
+        }
+        else
+        {
+            if (!vBusyHour[hour])
             {
                 // new fragment started
                 fragmentStart = hour;
@@ -164,13 +199,14 @@ void cSchedule::split(cTask &t)
 
     // loop over hours in task window
     for (
-        int hour = t.wStart * HOURS_PER_DAY;
-        hour <= t.wEnd * HOURS_PER_DAY;
+        int hour = t.getStartWindowTime();
+        hour <= t.getEndWindowTime();
         hour++)
     {
         if (infragment)
         {
-            if (!vBusyHour[hour])
+            if (!vBusyHour[hour] &&
+                hour != t.getEndWindowTime())
             {
                 // extend fragment
                 fragmentEnd++;
@@ -229,19 +265,19 @@ void readfile(
             "Cannot open input file");
     std::string type;
     cTask task;
-    ifs >> type >> task.name >> task.duration >> task.wStart >> task.wEnd 
-        >> task.minSplit;
-    while (ifs.good())
+
+    int wStart, wEnd;
+
+    while (1)
     {
-        std::cout << "\nAdding "
-                  << task.name << " " << task.duration << " "
-                  << task.wStart << " " << task.wEnd << " "
-                  << task.minSplit << "\n";
+        ifs >> type >> task.name >> task.duration >> wStart >> wEnd >> task.minSplit >> task.fulfillment;
+        if (!ifs.good())
+            break;
+
+        task.setStartWindowDay(wStart);
+        task.setEndWindowDay(wEnd);
 
         S.add(task);
-
-        ifs >> type >> task.name >> task.duration >> task.wStart >> task.wEnd 
-            >> task.minSplit;
     }
 }
 
