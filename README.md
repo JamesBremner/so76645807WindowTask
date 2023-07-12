@@ -8,3 +8,5 @@
 - Tasks can be scheduled in any order
 - Tasks are added one at a time.  New tasks do not alter the scheduling of previously added tasks, unless there is no alternative.
 - There is a single task processor that handles one task at a time.
+- The display shows the busy hours ( B ) and the free hours ( _ ).
+- The display shows the fulfillments score and context switch count for each day.
