@@ -60,6 +60,7 @@ public:
     void add(cTask &t);
 
     void display() const;
+    void displayDays() const;
 
     void unitTest();
 
@@ -83,7 +84,14 @@ private:
 
     int totallowerfulfill(cTask &t);
 
-    cTask &taskOccupy(int time);
+    /// @brief get task that is being processed
+    /// @param time hour index
+    /// @return reference to task occupying hour
+    /// If the hour is free the returned task will have actualStart == -1
+   
+    const cTask &taskOccupy(int time) const;
 
     void schedule(cTask &t, int start);
+
+    void displayDay( int day ) const;
 };

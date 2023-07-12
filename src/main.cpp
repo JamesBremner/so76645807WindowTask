@@ -105,7 +105,7 @@ void cSchedule::display() const
     std::cout << "\n";
 }
 
-cTask &cSchedule::taskOccupy(int time)
+const cTask &cSchedule::taskOccupy(int time) const
 {
     // loop over tasks
     for (auto &t : vTask)
@@ -132,7 +132,7 @@ int cSchedule::totallowerfulfill(cTask &t)
         hour <= t.getEndWindowTime();
         hour++)
     {
-        cTask &o = taskOccupy(hour);
+        const cTask &o = taskOccupy(hour);
         if (o.actualStart < 0)
             continue;
         if (o.fulfillment >= t.fulfillment)
@@ -140,6 +140,60 @@ int cSchedule::totallowerfulfill(cTask &t)
         total++;
     }
     return total;
+}
+
+void cSchedule::displayDay(int day) const
+{
+    int countSwitch = 0;
+    int totalFullfillment = 0;
+    cTask nullTask;
+    nullTask.actualStart = -1;
+    cTask &prevTask = nullTask;
+    for (
+        int hour = day * HOURS_PER_DAY;
+        hour < (day + 1) * HOURS_PER_DAY;
+        hour++)
+    {
+        auto &t = taskOccupy(hour);
+
+        if (prevTask.actualStart < 0 && t.actualStart < 0)
+        {
+            // idleness continues
+        }
+        else if (prevTask.actualStart < 0 && t.actualStart >= 0)
+        {
+            // new task started after free hour
+            // Q: should this count as a context switch
+        }
+        else if (prevTask.actualStart >= 0 && t.actualStart < 0)
+        {
+            // task ended, no new task
+            totalFullfillment += prevTask.fulfillment;
+            continue;
+        }
+        else if( prevTask.name != t.name )
+        {
+            // new task succeeds previous task
+            countSwitch++;
+            totalFullfillment += prevTask.fulfillment;
+        }
+
+        prevTask = t;
+    }
+    std::cout << "Day: " << day
+              << " ContextSwitches: " << countSwitch
+              << " Fulfillment: " << totalFullfillment
+              << "\n";
+}
+
+void cSchedule::displayDays() const
+{
+    for (int day = 0;
+         day <= TOTAL_AVAILABLE_HOURS / HOURS_PER_DAY;
+         day++)
+    {
+        displayDay(day);
+    }
 }
 
 int cSchedule::freeFragments(
@@ -307,6 +361,8 @@ void readfile(
         task.setWindow(wStart, wEnd);
 
         S.add(task);
+
+        S.displayDays();
     }
 }
 
